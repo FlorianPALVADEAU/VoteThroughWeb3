@@ -17,15 +17,32 @@ import {
   YAxis
 } from "recharts";
 import { AddCandidateModal } from "./components/AddCandidateModal";
+import { TooltipContent, TooltipTrigger, Tooltip as UiTooltip } from "./components/ui/tooltip";
+import VoteModal from "./components/VoteModal";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function App() {
   const {
-    connect,
-    disconnect,
+    // États de base
     isConnected,
     address,
+    isOwner,
+    connect,
+    disconnect,
+    
+    // États du vote
     candidates,
+    votes,
+    maxVoters,
+    currentRound,
+    hasVoted,
+    votingActive,
+    remainingVotes,
+    
+    // Fonctions
+    sendVote,
+    addCandidate,
+    refreshData
     getVotesAndCandidates,
     sendVote,
     hasVoted,
@@ -42,13 +59,29 @@ export default function App() {
     if (isConnected) {
       loadCandidates();
     }
-  }, [isConnected]);
 
-  const loadCandidates = async () => {
-    setLoadingCandidates(true);
-    await getVotesAndCandidates();
-    setLoadingCandidates(false);
+    try {
+        setIsVoting(true);
+        await sendVote(candidateName); // ✅ Passe bien une string
+        alert(`Vote envoyé avec succès pour ${candidateName}!`);
+    } catch (error) {
+        console.error('Erreur lors du vote:', error);
+        alert('Erreur lors du vote. Vérifiez la console.');
+    } finally {
+        setIsVoting(false);
+    }
   };
+
+  const [isVoting, setIsVoting] = useState(false);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [openModal, setOpenModal] = useState(false);
+  const [openModalVote, setOpenModalVote] = useState(false);
+
+  const mockData = candidates?.map((name, i) => ({
+    name,
+    votes: Math.floor(Math.random() * 100), // Replace with real votes later
+    fill: `hsl(${(i * 100) % 360}, 70%, 50%)`
+  })) || [];
 
   return (
     <main className="max-w-4xl mx-auto mt-12 p-4 space-y-6">
@@ -144,6 +177,7 @@ export default function App() {
       </>
       )}
       <AddCandidateModal isOpen={openModal} setOpen={setOpenModal}/>
+      <VoteModal isOpen={openModalVote} setOpen={setOpenModalVote} />
     </main>
   );
 }

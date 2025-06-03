@@ -12,7 +12,6 @@ declare global {
 }
 
 const contractAddress = '0xbfB1272fC22fD86D0B2b737c88b509E98e269406';
-// const contractAddress = '0x87AD66b04f6F3dd04516aDB2f9f0ea57AB6aD273';
 
 export function useWallet() {
     const [wallet, setWallet] = useState<ethers.Contract | null>(null);
@@ -25,6 +24,11 @@ export function useWallet() {
 
     const [address, setAddress] = useState<string | null>(null);
     const [ensName, setEnsName] = useState<string | null>(null);
+
+    const [currentRound, setCurrentRound] = useState<number>(1);
+    const [maxVoters, setMaxVoters] = useState<number>(0);
+    const [remainingVotes, setRemainingVotes] = useState<number>(0);
+    const [votingActive, setVotingActive] = useState<boolean>(true);
 
     useEffect(() => {
         checkExistingConnection();
@@ -71,11 +75,13 @@ export function useWallet() {
 
             const contractSign = new ethers.Contract(contractAddress, VotingABI.abi, signer);
             setWallet(contractSign);
-            setIsOwner(await contractSign.owner() === userAddress);
+
+            const ownerAddress = await contractSign.owner();
+            setIsOwner(ownerAddress.toLowerCase() === userAddress.toLowerCase());
             localStorage.removeItem('manuallyDisconnected');
 
-            await getVotesAndCandidates();
 
+            await loadContractData(contractSign, userAddress);
             console.log("Wallet connected successfully.", contractSign);
         } catch (error) {
             console.error("Error connecting wallet:", error);
@@ -103,6 +109,10 @@ export function useWallet() {
         setBalance(null);
         setAddress(null);
         setEnsName(null);
+        setCandidates(null);
+        setHasVoted(false);
+        setVotes(0);
+        setIsOwner(false);
 
         localStorage.setItem('manuallyDisconnected', 'true');
     }
@@ -123,6 +133,40 @@ export function useWallet() {
         return true;
     }
 
+    const loadContractData = async (contractInstance?: ethers.Contract, userAddress?: string) => {
+        const contract = contractInstance || wallet;
+        if (!contract) return;
+
+        try {
+            const votingStatus = await contract.getVotingStatus();
+            setCurrentRound(Number(votingStatus._currentRound));
+            setVotes(Number(votingStatus._totalVotes));
+            setMaxVoters(Number(votingStatus._maxVoters));
+            setRemainingVotes(Number(votingStatus._remainingVotes));
+            setVotingActive(votingStatus._votingActive);
+
+            if (userAddress || address) {
+                const userHasVoted = await contract.checkIfVoted(userAddress || address);
+                setHasVoted(userHasVoted);
+            }
+
+            const candidatesList = await contract?.getAllCandidates();
+            setCandidates(candidatesList);
+
+            console.log("Contract data loaded:", {
+                round: votingStatus._currentRound,
+                totalVotes: votingStatus._totalVotes,
+                maxVoters: votingStatus._maxVoters,
+                remainingVotes: votingStatus._remainingVotes,
+                votingActive: votingStatus._votingActive,
+                candidates: candidatesList
+            });
+
+        } catch (error) {
+            console.error("Error loading contract data:", error);
+        }
+    }
+
     const getVotesAndCandidates = async () => {
         if (!checkMetaMaskIntalled()) return;
         if (!checkWalletConnection()) return;
@@ -141,34 +185,124 @@ export function useWallet() {
         }
     }
 
-    const sendVote = async() => {
+    const getCandidates = async () => {
         if (!checkMetaMaskIntalled()) return;
-        if (!checkWalletConnection()) return;
-        if (await wallet?.canVote() === false) return;
 
         try {
-            const vote = await wallet?.sendVote();
-            await vote.wait();
-            console.log("Vote sent successfully:", vote);
-            setHasVoted(true);
-            await getVotesAndCandidates();
+            if (!await checkWalletConnection()) return;
+
+            const c = await wallet?.getAllCandidates();
+            if (c && Array.isArray(c)) {
+                setCandidates(c);
+                console.log("candidates", c);
+                
+            } else {
+                console.error("Invalid candidates data:", c);
+                setCandidates([]);
+            }
+        } catch (error) {
+            console.error("Error fetching candidates:", error);
+            return [];
+        }
+    }
+
+    const sendVote = async (candidateName: string) => {
+        if (!checkMetaMaskIntalled()) return;
+        if (!await checkWalletConnection()) return;
+
+        try {
+            const canVote = await wallet?.canVote();
+            if (!canVote) {
+                console.error("You cannot vote at this time");
+                return;
+            }
+
+
+            const tx = await wallet?.sendVote(candidateName);
+            await tx.wait();
+            
+            console.log("Vote sent successfully:", tx);
+            
+            await loadContractData();
         } catch (error) {
             console.error("Error sending vote:", error);
+            throw error; // Relancer l'erreur pour que l'UI puisse la gérer
         }
     }
 
     const addCandidate = async (name: string) => {
         if (!checkMetaMaskIntalled()) return;
-        if (!checkWalletConnection()) return;
-        if (!isOwner) return;
+        if (!await checkWalletConnection()) return;
+        if (!isOwner) {
+            console.error("Only owner can add candidates");
+            return;
+        }
 
         try {
             const tx = await wallet?.addCandidate(name);
             await tx.wait();
             console.log("Candidate added successfully:", name);
+          
+            await loadContractData();
             await getVotesAndCandidates();
         } catch (error) {
             console.error("Error adding candidate:", error);
+            throw error;
+        }
+    }
+
+    const getResults = async () => {
+        if (!wallet) return null;
+        
+        try {
+            const results = await wallet.getAllResults();
+            return {
+                candidates: results[0],
+                votes: results[1].map((v: any) => Number(v))
+            };
+        } catch (error) {
+            console.error("Error getting results:", error);
+            return null;
+        }
+    }
+
+    const getWinners = async () => {
+        if (!wallet) return null;
+        
+        try {
+            const winners = await wallet.getWinners();
+            return winners;
+        } catch (error) {
+            console.error("Error getting winners:", error);
+            return null;
+        }
+    }
+
+    const resetVotersForNewRound = async (voterAddresses: string[]) => {
+        if (!wallet || !isOwner) return;
+        
+        try {
+            const tx = await wallet.resetVotersForNewRound(voterAddresses);
+            await tx.wait();
+            console.log("Voters reset for new round");
+            await loadContractData();
+        } catch (error) {
+            console.error("Error resetting voters:", error);
+            throw error;
+        }
+    }
+
+    const setMaxVotersCount = async (newMaxVoters: number) => {
+        if (!wallet || !isOwner) return;
+        
+        try {
+            const tx = await wallet.setMaxVoters(newMaxVoters);
+            await tx.wait();
+            console.log("Max voters updated:", newMaxVoters);
+            await loadContractData();
+        } catch (error) {
+            console.error("Error setting max voters:", error);
+            throw error;
         }
     }
 
@@ -198,6 +332,12 @@ export function useWallet() {
         }
     }, [])
 
+    const refreshData = async () => {
+        if (wallet) {
+            await loadContractData();
+        }
+    }
+
     return {
         wallet,
         balance,
@@ -207,13 +347,25 @@ export function useWallet() {
         connect,
         disconnect,
         isConnected: !!wallet,
+        candidates,
         getVotesAndCandidates,
         candidates,
-        getWalletVotes: getVotesAndCandidates,
         votes,
         sendVote,
         isOwner,
         hasVoted,
-        addCandidate
+        addCandidate,
+        
+        // Nouveaux états et fonctions
+        currentRound,
+        maxVoters,
+        remainingVotes,
+        votingActive,
+        loadContractData,
+        getResults,
+        getWinners,
+        resetVotersForNewRound,
+        setMaxVotersCount,
+        refreshData
     }
 }
