@@ -13,35 +13,54 @@ import {
 } from "recharts";
 import { AddCandidateModal } from "./components/AddCandidateModal";
 import { TooltipContent, TooltipTrigger, Tooltip as UiTooltip } from "./components/ui/tooltip";
+import VoteModal from "./components/VoteModal";
 
 export default function App() {
   const {
-    connect,
-    disconnect,
+    // États de base
     isConnected,
     address,
+    isOwner,
+    connect,
+    disconnect,
+    
+    // États du vote
     candidates,
-    getCandidates,
-    sendVote,
-    hasVoted,
     votes,
-    isOwner
+    maxVoters,
+    currentRound,
+    hasVoted,
+    votingActive,
+    remainingVotes,
+    
+    // Fonctions
+    sendVote,
+    addCandidate,
+    refreshData
   } = useWallet();
 
+  const handleVote = async (candidateName) => {
+    if (!candidateName || typeof candidateName !== 'string') {
+        alert('Nom de candidat invalide');
+        return;
+    }
+
+    try {
+        setIsVoting(true);
+        await sendVote(candidateName); // ✅ Passe bien une string
+        alert(`Vote envoyé avec succès pour ${candidateName}!`);
+    } catch (error) {
+        console.error('Erreur lors du vote:', error);
+        alert('Erreur lors du vote. Vérifiez la console.');
+    } finally {
+        setIsVoting(false);
+    }
+  };
+
+  const [isVoting, setIsVoting] = useState(false);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [openModal, setOpenModal] = useState(false);
-
-  useEffect(() => {
-    if (isConnected) {
-      loadCandidates();
-    }
-  }, [isConnected]);
-
-  const loadCandidates = async () => {
-    setLoadingCandidates(true);
-    await getCandidates();
-    setLoadingCandidates(false);
-  };
+  const [openModalVote, setOpenModalVote] = useState(false);
 
   const mockData = candidates?.map((name, i) => ({
     name,
@@ -80,7 +99,7 @@ export default function App() {
               </p>
             </div>
             {isConnected && !hasVoted && (
-              <Button onClick={sendVote} disabled={!candidates?.length} className="mt-4 md:mt-0">
+              <Button onClick={() => {setOpenModalVote(!openModal)}} disabled={!candidates?.length} className="mt-4 md:mt-0">
                 Cast Vote
               </Button>
             )}
@@ -131,6 +150,7 @@ export default function App() {
         </CardContent>
       </Card>
       <AddCandidateModal isOpen={openModal} setOpen={setOpenModal}/>
+      <VoteModal isOpen={openModalVote} setOpen={setOpenModalVote} />
     </main>
   );
 }
