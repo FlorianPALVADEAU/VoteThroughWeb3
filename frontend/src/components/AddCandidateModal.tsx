@@ -32,34 +32,33 @@ export function AddCandidateModal(props: AddCandidateModalProps) {
         }
         addCandidate(name)
         event.currentTarget.reset()
+        props.setOpen(false)
     }
 
     return (
         <Dialog open={props.isOpen} onOpenChange={props.setOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-            <DialogTitle>Add Candidate to vote</DialogTitle>
-            <DialogDescription>
-                Add candidate to the vote list. Click save when you're done.
-            </DialogDescription>
-            </DialogHeader>
-            
-            {/* 🟢 Le formulaire commence ici */}
-            <form onSubmit={handleSubmit} className="grid gap-4">
-            <div className="grid gap-3">
-                <Label htmlFor="candidate-name">Candidate Name</Label>
-                <Input id="candidate-name" name="name" defaultValue="John Doe" />
-            </div>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Add Candidate to vote</DialogTitle>
+                    <DialogDescription>
+                        Add candidate to the vote list. Click save when you're done.
+                    </DialogDescription>
+                </DialogHeader>
+                
+                <form onSubmit={handleSubmit} className="grid gap-4">
+                    <div className="grid gap-3">
+                        <Label htmlFor="candidate-name">Candidate Name</Label>
+                        <Input id="candidate-name" name="name" defaultValue="John Doe" />
+                    </div>
 
-            <DialogFooter className="mt-4">
-                <DialogClose asChild>
-                <Button variant="outline" type="button">Cancel</Button>
-                </DialogClose>
-                <Button type="submit">Save changes</Button>
-            </DialogFooter>
-            </form>
-        </DialogContent>
+                    <DialogFooter className="mt-4">
+                        <DialogClose asChild>
+                            <Button variant="outline" type="button">Cancel</Button>
+                        </DialogClose>
+                        <Button type="submit">Save changes</Button>
+                    </DialogFooter>
+                </form>
+            </DialogContent>
         </Dialog>
-
     )
 }

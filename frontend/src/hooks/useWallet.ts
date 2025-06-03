@@ -11,7 +11,8 @@ declare global {
     }
 }
 
-const contractAddress = '0x87AD66b04f6F3dd04516aDB2f9f0ea57AB6aD273';
+const contractAddress = '0xbfB1272fC22fD86D0B2b737c88b509E98e269406';
+// const contractAddress = '0x87AD66b04f6F3dd04516aDB2f9f0ea57AB6aD273';
 
 export function useWallet() {
     const [wallet, setWallet] = useState<ethers.Contract | null>(null);
@@ -73,7 +74,7 @@ export function useWallet() {
             setIsOwner(await contractSign.owner() === userAddress);
             localStorage.removeItem('manuallyDisconnected');
 
-            await getWalletVotes();
+            await getVotesAndCandidates();
 
             console.log("Wallet connected successfully.", contractSign);
         } catch (error) {
@@ -122,38 +123,21 @@ export function useWallet() {
         return true;
     }
 
-    const getWalletVotes = async () => {
+    const getVotesAndCandidates = async () => {
         if (!checkMetaMaskIntalled()) return;
+        if (!checkWalletConnection()) return;
 
         try {
-            const v = await wallet?.getTotalVotes(contractAddress);
-            console.log('AAAAAAAAAA', v);
-            
-            setVotes(v);
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            const contractSign = new ethers.Contract(contractAddress, VotingABI.abi, signer);
+
+            const v = await contractSign.getAllResults();
+            setVotes(v[1].map((c: string) => Number(c)));
+            setCandidates(v[0]);
         } catch (error) {
             console.error("Error fetching wallet balance:", error);
             setVotes(0);
-        }
-    }
-
-    const getCandidates = async () => {
-        if (!checkMetaMaskIntalled()) return;
-
-        try {
-            if (!await checkWalletConnection()) return;
-
-            const c = await wallet?.getAllCandidates();
-            if (c && Array.isArray(c)) {
-                setCandidates(c);
-                console.log("candidates", c);
-                
-            } else {
-                console.error("Invalid candidates data:", c);
-                setCandidates([]);
-            }
-        } catch (error) {
-            console.error("Error fetching candidates:", error);
-            return [];
         }
     }
 
@@ -163,11 +147,11 @@ export function useWallet() {
         if (await wallet?.canVote() === false) return;
 
         try {
-            const vote = await wallet?.vote();
+            const vote = await wallet?.sendVote();
             await vote.wait();
             console.log("Vote sent successfully:", vote);
             setHasVoted(true);
-            await getWalletVotes();
+            await getVotesAndCandidates();
         } catch (error) {
             console.error("Error sending vote:", error);
         }
@@ -182,7 +166,7 @@ export function useWallet() {
             const tx = await wallet?.addCandidate(name);
             await tx.wait();
             console.log("Candidate added successfully:", name);
-            await getCandidates();
+            await getVotesAndCandidates();
         } catch (error) {
             console.error("Error adding candidate:", error);
         }
@@ -223,9 +207,9 @@ export function useWallet() {
         connect,
         disconnect,
         isConnected: !!wallet,
-        getCandidates,
+        getVotesAndCandidates,
         candidates,
-        getWalletVotes,
+        getWalletVotes: getVotesAndCandidates,
         votes,
         sendVote,
         isOwner,
