@@ -1,35 +1,136 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+/* eslint-disable react-hooks/exhaustive-deps */
+import { useEffect, useState } from "react";
+import { useWallet } from "./hooks/useWallet";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import {
+  RadialBarChart,
+  RadialBar,
+  Legend,
+  Tooltip,
+  ResponsiveContainer
+} from "recharts";
+import { AddCandidateModal } from "./components/AddCandidateModal";
+import { TooltipContent, TooltipTrigger, Tooltip as UiTooltip } from "./components/ui/tooltip";
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const {
+    connect,
+    disconnect,
+    isConnected,
+    address,
+    candidates,
+    getCandidates,
+    sendVote,
+    hasVoted,
+    votes,
+    isOwner
+  } = useWallet();
+
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const [openModal, setOpenModal] = useState(false);
+
+  useEffect(() => {
+    if (isConnected) {
+      loadCandidates();
+    }
+  }, [isConnected]);
+
+  const loadCandidates = async () => {
+    setLoadingCandidates(true);
+    await getCandidates();
+    setLoadingCandidates(false);
+  };
+
+  const mockData = candidates?.map((name, i) => ({
+    name,
+    votes: Math.floor(Math.random() * 100), // Replace with real votes later
+    fill: `hsl(${(i * 100) % 360}, 70%, 50%)`
+  })) || [];
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
-}
+    <main className="max-w-4xl mx-auto mt-12 p-4 space-y-6">
+      {
+        isOwner && (
+          <Button onClick={() => {setOpenModal(!openModal)}} variant="destructive">
+            Add Candidate
+          </Button>
+        )
+      }
+      <Card className="rounded-2xl shadow-md">
+        <CardContent className="p-6 space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-semibold">Vote Dashboard</h1>
+              <p className="text-sm text-muted-foreground">
+                {isConnected ? `Connected: ${address}` : "Not connected"}
+              </p>
+            </div>
+            <Button onClick={isConnected ? disconnect : connect}>
+              {isConnected ? "Disconnect" : "Connect Wallet"}
+            </Button>
+          </div>
+          <Separator />
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="font-medium">Total Votes: {votes}</p>
+              <p className="text-sm text-muted-foreground">
+                {hasVoted ? "You have voted." : "You haven't voted yet."}
+              </p>
+            </div>
+            {isConnected && !hasVoted && (
+              <Button onClick={sendVote} disabled={!candidates?.length} className="mt-4 md:mt-0">
+                Cast Vote
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
-export default App
+      <Card className="rounded-2xl shadow-md">
+        <CardContent className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Candidate Dominance</h2>
+          {loadingCandidates ? (
+            <p>Loading candidates...</p>
+          ) : (
+              candidates && candidates.length > 0 ? (
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadialBarChart
+                      cx="50%"
+                      cy="80%"
+                      innerRadius="10%"
+                      outerRadius="100%"
+                      barSize={15}
+                      data={mockData}
+                      startAngle={180}
+                      endAngle={0}
+                    >
+                      <RadialBar
+                        background
+                        dataKey="votes"
+                      />
+                      <Legend
+                        iconSize={10}
+                        layout="horizontal"
+                        verticalAlign="top"
+                        align="center"
+                      />
+                      <Tooltip />
+                    </RadialBarChart>
+                  </ResponsiveContainer>
+                </div>
+              ) : (
+                <>
+                  <p>No candidates available.</p>
+                  <p>{isOwner ? "Please add candidates to start voting." : "Please contact your administrator to add candidates."}</p>
+                </>
+              )
+          )}
+        </CardContent>
+      </Card>
+      <AddCandidateModal isOpen={openModal} setOpen={setOpenModal}/>
+    </main>
+  );
+}
