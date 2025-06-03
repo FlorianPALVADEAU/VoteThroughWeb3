@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useEffect, useState } from "react";
@@ -6,7 +7,6 @@ import VotingABI from '../abis/Voting.json';
 
 declare global {
     interface Window {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ethereum?: any;
     }
 }
@@ -159,13 +159,11 @@ export function useWallet() {
             const candidatesList = await contract?.getAllCandidates();
             setCandidates(candidatesList);
 
-            // Récupérer les votes pour chaque candidat
             if (candidatesList && candidatesList.length > 0) {
                 const results = await contract.getAllResults();
                 setVotesArray(results[1].map((v: any) => Number(v)));
             }
 
-            // Vérifier s'il y a des gagnants quand le vote est terminé
             if (votingStatus._isComplete) {
                 try {
                     const currentWinners = await contract.getWinners();
@@ -189,7 +187,6 @@ export function useWallet() {
         if (!await checkWalletConnection()) return;
 
         try {
-            // Vérifier si l'utilisateur peut voter
             const canVote = await wallet?.canVote();
             if (!canVote) {
                 console.error("You cannot vote at this time");
@@ -263,7 +260,7 @@ export function useWallet() {
         try {
             let addresses = voterAddresses;
             
-            // Si aucune adresse n'est fournie, obtenir tous les électeurs du contrat
+
             if (!addresses) {
                 addresses = await wallet.getAllVoters();
             }
@@ -294,20 +291,17 @@ export function useWallet() {
         }
     }
 
-    // Nouvelle fonction pour redémarrer complètement le vote
     const restartVoting = async () => {
         if (!wallet || !isOwner) return;
         
         try {
             console.log("Restarting voting system...");
             
-            // Appeler la fonction restartVoting du contrat
             const tx = await wallet.restartVoting();
             await tx.wait();
             
             console.log("Voting restarted successfully");
             
-            // Reset des états locaux
             setCandidates([]);
             setVotes(0);
             setVotesArray([]);
@@ -317,7 +311,6 @@ export function useWallet() {
             setCurrentRound(1);
             setVotingActive(true);
             
-            // Recharger les données du contrat
             await loadContractData();
         } catch (error) {
             console.error("Error restarting voting:", error);
@@ -375,7 +368,6 @@ export function useWallet() {
         addCandidate,
         getVotesAndCandidates,
         
-        // États et fonctions pour les rounds et résultats
         currentRound,
         maxVoters,
         remainingVotes,

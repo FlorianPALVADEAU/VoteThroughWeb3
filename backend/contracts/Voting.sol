@@ -17,7 +17,6 @@ contract Voting {
     string[] public candidates;
     mapping(string => bool) public candidateExists;
     
-    // Pour garder une trace des électeurs pour le reset
     address[] public voters;
     mapping(address => bool) public isVoter;
     
@@ -63,7 +62,6 @@ contract Voting {
         require(candidates.length > 0, "No candidates available yet");
         require(getTotalVotes() < maxVoters, "Voting limit reached");
         
-        // Ajouter l'électeur à la liste si ce n'est pas déjà fait
         if (!isVoter[msg.sender]) {
             voters.push(msg.sender);
             isVoter[msg.sender] = true;
@@ -91,7 +89,6 @@ contract Voting {
     }
 
     function startNewRound(string[] memory tiedCandidates) internal {
-        // Sauvegarder les résultats du round actuel
         for (uint i = 0; i < candidates.length; i++) {
             votesByRound[currentRound][candidates[i]] = votesByCandidate[candidates[i]];
         }
@@ -99,14 +96,12 @@ contract Voting {
         
         currentRound++;
         
-        // Reset des votes pour le nouveau round
         for (uint i = 0; i < candidates.length; i++) {
             candidateExists[candidates[i]] = false;
             votesByCandidate[candidates[i]] = 0;
         }
         delete candidates;
         
-        // Ajouter seulement les candidats à égalité
         for (uint i = 0; i < tiedCandidates.length; i++) {
             candidates.push(tiedCandidates[i]);
             candidateExists[tiedCandidates[i]] = true;
@@ -121,34 +116,24 @@ contract Voting {
         }
     }
 
-    // Nouvelle fonction pour redémarrer complètement le vote
     function restartVoting() public onlyOwner {
-        // Reset de tous les états
         currentRound = 1;
         votingActive = true;
         
-        // Supprimer tous les candidats
         for (uint i = 0; i < candidates.length; i++) {
             candidateExists[candidates[i]] = false;
             votesByCandidate[candidates[i]] = 0;
         }
         delete candidates;
         
-        // Reset de tous les électeurs
         for (uint i = 0; i < voters.length; i++) {
             hasVoted[voters[i]] = false;
             isVoter[voters[i]] = false;
         }
         delete voters;
-        
-        // Reset des données historiques (optionnel)
-        // Note: Les mappings imbriqués ne peuvent pas être supprimés facilement
-        // mais les nouveaux rounds écraseront les données
-        
         emit VotingRestarted();
     }
 
-    // Fonction pour reset seulement les électeurs (pour les nouveaux rounds)
     function resetAllVoters() public onlyOwner {
         for (uint i = 0; i < voters.length; i++) {
             hasVoted[voters[i]] = false;
@@ -266,12 +251,10 @@ contract Voting {
         maxVoters = _newMaxVoters;
     }
     
-    // Fonction utilitaire pour obtenir tous les électeurs
     function getAllVoters() public view returns (address[] memory) {
         return voters;
     }
     
-    // Fonction pour obtenir le nombre d'électeurs uniques
     function getVoterCount() public view returns (uint) {
         return voters.length;
     }

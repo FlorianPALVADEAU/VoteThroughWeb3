@@ -18,6 +18,7 @@ type DisplayResultsModalProps = {
   setOpen: (open: boolean) => void
   winner: string | null
   onRestart: () => void
+  isRestarting?: boolean
 }
 
 export function DisplayResultsModal(props: DisplayResultsModalProps) {
@@ -39,7 +40,7 @@ export function DisplayResultsModal(props: DisplayResultsModalProps) {
     }
 
     const handleTriggerConfettis = () => {
-        const end = Date.now() + 3 * 1000; // 3 seconds
+        const end = Date.now() + 3 * 1000;
         const colors = ["#a786ff", "#fd8bbc", "#eca184", "#f8deb1"];
 
         const frame = () => {

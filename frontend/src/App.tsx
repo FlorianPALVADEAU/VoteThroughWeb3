@@ -55,14 +55,11 @@ export default function App() {
     }
   }, [isConnected]);
 
-  // Détecter quand le vote est terminé pour afficher les résultats
   useEffect(() => {
     if (isVotingComplete && winners.length > 0) {
       if (winners.length === 1) {
-        // Il y a un gagnant unique
         setOpenResultsModal(true);
       } else if (winners.length > 1) {
-        // Il y a égalité, nouveau round automatique
         console.log("Tie detected, moving to round", currentRound + 1);
       }
     }
@@ -75,7 +72,6 @@ export default function App() {
   };
 
   const handleRestart = async () => {
-    // Confirmation avant restart
     const confirmed = window.confirm(
       "Are you sure you want to restart the voting system? This will delete all current votes and candidates."
     );
@@ -116,7 +112,6 @@ export default function App() {
 
   return (
     <main className="max-w-4xl mx-auto mt-12 p-4 space-y-6">
-      {/* Header avec status du round */}
       <div className="flex justify-between items-center">
         <div className="space-y-2">
           <h1 className="text-3xl font-bold">Vote Dashboard</h1>
@@ -125,17 +120,14 @@ export default function App() {
           </Badge>
         </div>
         
-        {/* Boutons pour le propriétaire */}
         {isOwner && (
           <div className="flex gap-2">
-            {/* Bouton pour ajouter un candidat (seulement round 1 et vote actif) */}
             {currentRound === 1 && votingActive && (
               <Button onClick={() => {setOpenModal(!openModal)}} variant="destructive">
                 Add Candidate
               </Button>
             )}
             
-            {/* Bouton pour redémarrer le vote (toujours visible pour le propriétaire) */}
             <Button 
               onClick={handleRestart} 
               variant="outline"
@@ -170,7 +162,6 @@ export default function App() {
             </div>
             <Separator />
             
-            {/* Informations détaillées du vote */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="text-center p-4 bg-muted rounded-lg">
                 <p className="text-2xl font-bold text-blue-600">{votes}</p>
