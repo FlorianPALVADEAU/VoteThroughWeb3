@@ -39,7 +39,8 @@ export default function App() {
     votingActive,
     isVotingComplete,
     winners,
-    restartVoting
+    restartVoting,
+    isPolling
   } = useWallet();
 
   const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff7f50", "#00bcd4", "#ff69b4", "#a2cf6e"];
@@ -48,6 +49,13 @@ export default function App() {
   const [openModalVote, setOpenModalVote] = useState(false);
   const [openResultsModal, setOpenResultsModal] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (candidates || votes || votesArray) {
+      setLastUpdateTime(new Date());
+    }
+  }, [candidates, votes, votesArray]);
 
   useEffect(() => {
     if (isConnected) {
@@ -114,7 +122,15 @@ export default function App() {
     <main className="max-w-4xl mx-auto mt-12 p-4 space-y-6">
       <div className="flex justify-between items-center">
         <div className="space-y-2">
-          <h1 className="text-3xl font-bold">Vote Dashboard</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold">Vote Dashboard</h1>
+            {isPolling && (
+              <div className="flex items-center gap-1 px-2 py-1 bg-green-100 rounded-full text-green-700 text-xs">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                Live
+              </div>
+            )}
+          </div>
           <Badge variant={getRoundVariant()} className="text-sm">
             {getRoundStatus()}
           </Badge>
@@ -152,9 +168,16 @@ export default function App() {
             <div className="flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-semibold">Connection Status</h2>
-                <p className="text-sm text-muted-foreground">
-                  {isConnected ? `Connected: ${address}` : "Not connected"}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm text-muted-foreground">
+                    {isConnected ? `Connected: ${address}` : "Not connected"}
+                  </p>
+                  {lastUpdateTime && isPolling && (
+                    <span className="text-xs text-green-600">
+                      • Updated {lastUpdateTime.toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
               </div>
               <Button onClick={isConnected ? disconnect : connect}>
                 {isConnected ? "Disconnect" : "Connect Wallet"}

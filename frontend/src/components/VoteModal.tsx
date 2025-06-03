@@ -21,7 +21,6 @@ const VoteModal = (props: VoteModalProps) => {
     const {
         candidates,
         sendVote,
-        refreshData,
         currentRound,
         remainingVotes,
         votingActive
@@ -32,19 +31,21 @@ const VoteModal = (props: VoteModalProps) => {
 
     const handleSubmit = async () => {
         if (!selectedCandidate) {
-            console.error("Please select a candidate before voting");
+            alert("Please select a candidate before voting");
             return;
         }
         try {
             setIsVoting(true);
             await sendVote(selectedCandidate);
-            await refreshData();
             
-            props.setOpen(false);
+            console.log(`✅ Vote cast successfully for ${selectedCandidate}!`);
+            
             setSelectedCandidate('');
+            props.setOpen(false);
             
         } catch (error) {
             console.error('Error voting:', error);
+            alert("Error casting vote. Please try again.");
         } finally {
             setIsVoting(false);
         }

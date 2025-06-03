@@ -17,7 +17,7 @@ type DisplayResultsModalProps = {
   isOpen: boolean
   setOpen: (open: boolean) => void
   winner: string | null
-  onRestart: () => void
+  onRestart: () => Promise<void>
   isRestarting?: boolean
 }
 
@@ -33,14 +33,13 @@ export function DisplayResultsModal(props: DisplayResultsModalProps) {
     const handleRestart = async () => {
         try {
             await props.onRestart();
-            handleClose();
         } catch (error) {
             console.error("Error restarting vote:", error);
         }
     }
 
     const handleTriggerConfettis = () => {
-        const end = Date.now() + 3 * 1000;
+        const end = Date.now() + 3 * 1000; // 3 seconds
         const colors = ["#a786ff", "#fd8bbc", "#eca184", "#f8deb1"];
 
         const frame = () => {
@@ -128,8 +127,9 @@ export function DisplayResultsModal(props: DisplayResultsModalProps) {
                                 type="button" 
                                 onClick={handleRestart}
                                 className="w-full sm:w-auto"
+                                disabled={props.isRestarting}
                             >
-                                🔄 Start New Vote
+                                {props.isRestarting ? "🔄 Restarting..." : "🔄 Start New Vote"}
                             </Button>
                         )}
                         <DialogClose asChild>

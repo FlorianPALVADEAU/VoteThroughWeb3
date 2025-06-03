@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useEffect, useState } from "react";
@@ -7,6 +6,7 @@ import VotingABI from '../abis/Voting.json';
 
 declare global {
     interface Window {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ethereum?: any;
     }
 }
@@ -32,6 +32,7 @@ export function useWallet() {
     const [votingActive, setVotingActive] = useState<boolean>(true);
     const [isVotingComplete, setIsVotingComplete] = useState<boolean>(false);
     const [winners, setWinners] = useState<string[]>([]);
+    const [isPolling, setIsPolling] = useState<boolean>(false);
 
     useEffect(() => {
         checkExistingConnection();
@@ -194,8 +195,9 @@ export function useWallet() {
             }
 
             const tx = await wallet?.sendVote(candidateName);
-            await tx.wait();
+            console.log("Vote transaction sent, waiting for confirmation...");
             
+            await tx.wait();
             console.log("Vote sent successfully:", tx);
             
             await loadContractData();
@@ -216,6 +218,8 @@ export function useWallet() {
 
         try {
             const tx = await wallet?.addCandidate(name);
+            console.log("Candidate addition transaction sent, waiting for confirmation...");
+            
             await tx.wait();
             console.log("Candidate added successfully:", name);
             
@@ -260,7 +264,6 @@ export function useWallet() {
         try {
             let addresses = voterAddresses;
             
-
             if (!addresses) {
                 addresses = await wallet.getAllVoters();
             }
@@ -350,6 +353,48 @@ export function useWallet() {
         }
     }
 
+    const startPolling = () => {
+        if (!isPolling && wallet) {
+            setIsPolling(true);
+            const intervalId = setInterval(async () => {
+                try {
+                    await loadContractData();
+                } catch (error) {
+                    console.error("Error during polling:", error);
+                }
+            }, 3000);
+
+            return intervalId;
+        }
+    };
+
+    const stopPolling = (intervalId: NodeJS.Timeout | null) => {
+        if (intervalId) {
+            clearInterval(intervalId);
+            setIsPolling(false);
+        }
+    };
+
+    useEffect(() => {
+        let intervalId: NodeJS.Timeout | null | undefined = null;
+
+        if (wallet && votingActive) {
+            intervalId = startPolling();
+        }
+
+        return () => {
+            if (intervalId) {
+                stopPolling(intervalId);
+            }
+        };
+    }, [wallet, votingActive]);
+
+    useEffect(() => {
+        if (!votingActive || isVotingComplete) {
+            setIsPolling(false);
+        }
+    }, [votingActive, isVotingComplete]);
+
     return {
         wallet,
         balance,
@@ -374,12 +419,15 @@ export function useWallet() {
         votingActive,
         isVotingComplete,
         winners,
+        isPolling,
         loadContractData,
         getResults,
         getWinners,
         resetVotersForNewRound,
         setMaxVotersCount,
         restartVoting,
-        refreshData
+        refreshData,
+        startPolling,
+        stopPolling
     }
 }
