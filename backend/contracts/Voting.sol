@@ -4,27 +4,42 @@ pragma solidity ^0.8.20;
 contract Voting {
     address public owner;
     uint public constant MAX_CANDIDATES = 2;
+    uint public maxVoters;
+    uint public currentRound;
+    bool public votingActive;
     
     mapping(address => bool) public hasVoted;
     mapping(string => uint) public votesByCandidate;
+
+    mapping(uint => mapping(string => uint)) public votesByRound;
+    mapping(uint => string[]) public candidatesByRound;
     
     string[] public candidates;
     mapping(string => bool) public candidateExists;
     
-    constructor() {
+    constructor(uint _maxVoters) {
+        require(_maxVoters > 0, "Max voters must be greater than 0");
         owner = msg.sender;
+        maxVoters = _maxVoters;
+        currentRound = 1;
+        votingActive = true;
     }
     
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner can perform this action");
         _;
     }
-    
 
+    modifier votingIsActive() {
+        require(votingActive, "Voting is not active");
+        _;
+    }
+    
     function addCandidate(string memory candidateName) public onlyOwner {
         require(candidates.length < MAX_CANDIDATES, "Maximum number of candidates reached (2)");
         require(bytes(candidateName).length > 0, "Candidate name cannot be empty");
         require(!candidateExists[candidateName], "Candidate already exists");
+        require(currentRound == 1, "Cannot add candidates after the first round has started");
         
         candidates.push(candidateName);
         candidateExists[candidateName] = true;
@@ -35,12 +50,82 @@ contract Voting {
         require(!hasVoted[msg.sender], "You have already voted");
         require(candidateExists[candidateName], "Candidate does not exist");
         require(candidates.length > 0, "No candidates available yet");
+        require(getTotalVotes() < maxVoters, "Voting limit reached");
         
         hasVoted[msg.sender] = true;
-        
         votesByCandidate[candidateName] += 1;
+
+        if (getTotalVotes() == maxVoters) {
+            checkForWinnerOrTie();
+        }
     }
-    
+
+
+
+    function checkForWinnerOrTie() internal {
+        (string[] memory winners) = getWinners();
+        
+        if (winners.length == 1) {
+            votingActive = false;
+        } else {
+            startNewRound(winners);
+        }
+    }
+
+    function startNewRound(string[] memory tiedCandidates) internal {
+        for (uint i = 0; i < candidates.length; i++) {
+            votesByRound[currentRound][candidates[i]] = votesByCandidate[candidates[i]];
+        }
+        candidatesByRound[currentRound] = candidates;
+        
+        currentRound++;
+        
+        for (uint i = 0; i < candidates.length; i++) {
+            candidateExists[candidates[i]] = false;
+            votesByCandidate[candidates[i]] = 0;
+        }
+        delete candidates;
+        
+        for (uint i = 0; i < tiedCandidates.length; i++) {
+            candidates.push(tiedCandidates[i]);
+            candidateExists[tiedCandidates[i]] = true;
+        }
+    }
+
+    function resetVotersForNewRound(address[] memory voters) public onlyOwner {
+        for (uint i = 0; i < voters.length; i++) {
+            hasVoted[voters[i]] = false;
+        }
+    }
+
+    function getWinners() public view returns (string[] memory winners) {
+        require(candidates.length > 0, "No candidates available");
+        
+        uint maxVotes = 0;
+        uint winnerCount = 0;
+        
+        for (uint i = 0; i < candidates.length; i++) {
+            uint currentVotes = votesByCandidate[candidates[i]];
+            if (currentVotes > maxVotes) {
+                maxVotes = currentVotes;
+                winnerCount = 1;
+            } else if (currentVotes == maxVotes) {
+                winnerCount++;
+            }
+        }
+        
+        winners = new string[](winnerCount);
+        uint index = 0;
+        
+        for (uint i = 0; i < candidates.length; i++) {
+            if (votesByCandidate[candidates[i]] == maxVotes) {
+                winners[index] = candidates[i];
+                index++;
+            }
+        }
+        
+        return winners;
+    }
 
     function getVotesForCandidate(string memory candidateName) public view returns (uint) {
         require(candidateExists[candidateName], "Candidate does not exist");
@@ -94,8 +179,43 @@ contract Voting {
         }
         return total;
     }
+
+    function getRemainingVotes() public view returns (uint) {
+        return maxVoters - getTotalVotes();
+    }
     
     function canVote() public view returns (bool) {
-        return candidates.length > 0 && !hasVoted[msg.sender];
+        return votingActive && 
+               candidates.length > 0 && 
+               !hasVoted[msg.sender] && 
+               getTotalVotes() < maxVoters;
+    }
+
+    function isVotingComplete() public view returns (bool) {
+        return getTotalVotes() == maxVoters;
+    }
+
+    function getVotingStatus() public view returns (
+        uint _currentRound,
+        uint _totalVotes,
+        uint _maxVoters,
+        uint _remainingVotes,
+        bool _votingActive,
+        bool _isComplete
+    ) {
+        return (
+            currentRound,
+            getTotalVotes(),
+            maxVoters,
+            getRemainingVotes(),
+            votingActive,
+            isVotingComplete()
+        );
+    }
+
+    function setMaxVoters(uint _newMaxVoters) public onlyOwner {
+        require(getTotalVotes() == 0, "Cannot change max voters after voting started");
+        require(_newMaxVoters > 0, "Max voters must be greater than 0");
+        maxVoters = _newMaxVoters;
     }
 }
