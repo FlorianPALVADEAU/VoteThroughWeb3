@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useEffect, useState } from "react";
@@ -12,7 +11,7 @@ declare global {
     }
 }
 
-const contractAddress = '0xbfB1272fC22fD86D0B2b737c88b509E98e269406';
+const contractAddress = '0x28b2bcA9fB7ebF2165A2d482d47Ea45c24279922';
 
 export function useWallet() {
     const [wallet, setWallet] = useState<ethers.Contract | null>(null);
@@ -20,9 +19,9 @@ export function useWallet() {
     const [candidates, setCandidates] = useState<string[] | null>(null);
     const [hasVoted, setHasVoted] = useState<boolean>(false);
     const [votes, setVotes] = useState<number>(0);
-    const [votesArray, setVotesArray] = useState<number[]>([]);
     const [isConnecting, setIsConnecting] = useState<boolean>(false);
     const [isOwner, setIsOwner] = useState<boolean>(false);
+    const [votesArray, setVotesArray] = useState<number[]>([]);
 
     const [address, setAddress] = useState<string | null>(null);
     const [ensName, setEnsName] = useState<string | null>(null);
@@ -31,6 +30,8 @@ export function useWallet() {
     const [maxVoters, setMaxVoters] = useState<number>(0);
     const [remainingVotes, setRemainingVotes] = useState<number>(0);
     const [votingActive, setVotingActive] = useState<boolean>(true);
+    const [isVotingComplete, setIsVotingComplete] = useState<boolean>(false);
+    const [winners, setWinners] = useState<string[]>([]);
 
     useEffect(() => {
         checkExistingConnection();
@@ -82,7 +83,6 @@ export function useWallet() {
             setIsOwner(ownerAddress.toLowerCase() === userAddress.toLowerCase());
             localStorage.removeItem('manuallyDisconnected');
 
-
             await loadContractData(contractSign, userAddress);
             console.log("Wallet connected successfully.", contractSign);
         } catch (error) {
@@ -115,6 +115,9 @@ export function useWallet() {
         setHasVoted(false);
         setVotes(0);
         setIsOwner(false);
+        setVotesArray([]);
+        setWinners([]);
+        setIsVotingComplete(false);
 
         localStorage.setItem('manuallyDisconnected', 'true');
     }
@@ -146,22 +149,31 @@ export function useWallet() {
             setMaxVoters(Number(votingStatus._maxVoters));
             setRemainingVotes(Number(votingStatus._remainingVotes));
             setVotingActive(votingStatus._votingActive);
+            setIsVotingComplete(votingStatus._isComplete);
 
             if (userAddress || address) {
                 const userHasVoted = await contract.checkIfVoted(userAddress || address);
                 setHasVoted(userHasVoted);
             }
 
-            await getVotesAndCandidates();
+            const candidatesList = await contract?.getAllCandidates();
+            setCandidates(candidatesList);
 
-            // console.log("Contract data loaded:", {
-            //     round: votingStatus._currentRound,
-            //     totalVotes: votingStatus._totalVotes,
-            //     maxVoters: votingStatus._maxVoters,
-            //     remainingVotes: votingStatus._remainingVotes,
-            //     votingActive: votingStatus._votingActive,
-            //     candidates: candidatesList
-            // });
+            // Récupérer les votes pour chaque candidat
+            if (candidatesList && candidatesList.length > 0) {
+                const results = await contract.getAllResults();
+                setVotesArray(results[1].map((v: any) => Number(v)));
+            }
+
+            // Vérifier s'il y a des gagnants quand le vote est terminé
+            if (votingStatus._isComplete) {
+                try {
+                    const currentWinners = await contract.getWinners();
+                    setWinners(currentWinners);
+                } catch (error) {
+                    console.error("Error getting winners:", error);
+                }
+            }
 
         } catch (error) {
             console.error("Error loading contract data:", error);
@@ -169,21 +181,7 @@ export function useWallet() {
     }
 
     const getVotesAndCandidates = async () => {
-        if (!checkMetaMaskIntalled()) return;
-        if (!checkWalletConnection()) return;
-
-        try {
-            const provider = new ethers.BrowserProvider(window.ethereum);
-            const signer = await provider.getSigner();
-            const contractSign = new ethers.Contract(contractAddress, VotingABI.abi, signer);
-
-            const v = await contractSign.getAllResults();
-            setVotesArray(v[1].map((c: string) => Number(c)));
-            setCandidates(v[0]);
-        } catch (error) {
-            console.error("Error fetching wallet balance:", error);
-            setVotesArray([]);
-        }
+        await loadContractData();
     }
 
     const sendVote = async (candidateName: string) => {
@@ -191,12 +189,12 @@ export function useWallet() {
         if (!await checkWalletConnection()) return;
 
         try {
+            // Vérifier si l'utilisateur peut voter
             const canVote = await wallet?.canVote();
             if (!canVote) {
                 console.error("You cannot vote at this time");
                 return;
             }
-
 
             const tx = await wallet?.sendVote(candidateName);
             await tx.wait();
@@ -204,9 +202,10 @@ export function useWallet() {
             console.log("Vote sent successfully:", tx);
             
             await loadContractData();
+            
         } catch (error) {
             console.error("Error sending vote:", error);
-            throw error; // Relancer l'erreur pour que l'UI puisse la gérer
+            throw error;
         }
     }
 
@@ -222,9 +221,9 @@ export function useWallet() {
             const tx = await wallet?.addCandidate(name);
             await tx.wait();
             console.log("Candidate added successfully:", name);
-          
+            
             await loadContractData();
-            await getVotesAndCandidates();
+            
         } catch (error) {
             console.error("Error adding candidate:", error);
             throw error;
@@ -258,14 +257,23 @@ export function useWallet() {
         }
     }
 
-    const resetVotersForNewRound = async (voterAddresses: string[]) => {
+    const resetVotersForNewRound = async (voterAddresses?: string[]) => {
         if (!wallet || !isOwner) return;
         
         try {
-            const tx = await wallet.resetVotersForNewRound(voterAddresses);
-            await tx.wait();
-            console.log("Voters reset for new round");
-            await loadContractData();
+            let addresses = voterAddresses;
+            
+            // Si aucune adresse n'est fournie, obtenir tous les électeurs du contrat
+            if (!addresses) {
+                addresses = await wallet.getAllVoters();
+            }
+            
+            if (addresses && addresses.length > 0) {
+                const tx = await wallet.resetVotersForNewRound(addresses);
+                await tx.wait();
+                console.log("Voters reset for new round");
+                await loadContractData();
+            }
         } catch (error) {
             console.error("Error resetting voters:", error);
             throw error;
@@ -282,6 +290,37 @@ export function useWallet() {
             await loadContractData();
         } catch (error) {
             console.error("Error setting max voters:", error);
+            throw error;
+        }
+    }
+
+    // Nouvelle fonction pour redémarrer complètement le vote
+    const restartVoting = async () => {
+        if (!wallet || !isOwner) return;
+        
+        try {
+            console.log("Restarting voting system...");
+            
+            // Appeler la fonction restartVoting du contrat
+            const tx = await wallet.restartVoting();
+            await tx.wait();
+            
+            console.log("Voting restarted successfully");
+            
+            // Reset des états locaux
+            setCandidates([]);
+            setVotes(0);
+            setVotesArray([]);
+            setWinners([]);
+            setIsVotingComplete(false);
+            setHasVoted(false);
+            setCurrentRound(1);
+            setVotingActive(true);
+            
+            // Recharger les données du contrat
+            await loadContractData();
+        } catch (error) {
+            console.error("Error restarting voting:", error);
             throw error;
         }
     }
@@ -328,22 +367,27 @@ export function useWallet() {
         disconnect,
         isConnected: !!wallet,
         candidates,
-        getVotesAndCandidates,
         votes,
+        votesArray,
         sendVote,
         isOwner,
         hasVoted,
         addCandidate,
-        votesArray,
+        getVotesAndCandidates,
+        
+        // États et fonctions pour les rounds et résultats
         currentRound,
         maxVoters,
         remainingVotes,
         votingActive,
+        isVotingComplete,
+        winners,
         loadContractData,
         getResults,
         getWinners,
         resetVotersForNewRound,
         setMaxVotersCount,
+        restartVoting,
         refreshData
     }
 }

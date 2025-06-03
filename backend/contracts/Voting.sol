@@ -17,6 +17,16 @@ contract Voting {
     string[] public candidates;
     mapping(string => bool) public candidateExists;
     
+    // Pour garder une trace des électeurs pour le reset
+    address[] public voters;
+    mapping(address => bool) public isVoter;
+    
+    event VoteCast(address indexed voter, string candidate, uint round);
+    event CandidateAdded(string candidate);
+    event RoundStarted(uint round, string[] candidates);
+    event VotingCompleted(string winner);
+    event VotingRestarted();
+    
     constructor(uint _maxVoters) {
         require(_maxVoters > 0, "Max voters must be greater than 0");
         owner = msg.sender;
@@ -43,36 +53,45 @@ contract Voting {
         
         candidates.push(candidateName);
         candidateExists[candidateName] = true;
+        
+        emit CandidateAdded(candidateName);
     }
     
-
     function sendVote(string memory candidateName) public {
         require(!hasVoted[msg.sender], "You have already voted");
         require(candidateExists[candidateName], "Candidate does not exist");
         require(candidates.length > 0, "No candidates available yet");
         require(getTotalVotes() < maxVoters, "Voting limit reached");
         
+        // Ajouter l'électeur à la liste si ce n'est pas déjà fait
+        if (!isVoter[msg.sender]) {
+            voters.push(msg.sender);
+            isVoter[msg.sender] = true;
+        }
+        
         hasVoted[msg.sender] = true;
         votesByCandidate[candidateName] += 1;
+        
+        emit VoteCast(msg.sender, candidateName, currentRound);
 
         if (getTotalVotes() == maxVoters) {
             checkForWinnerOrTie();
         }
     }
 
-
-
     function checkForWinnerOrTie() internal {
         (string[] memory winners) = getWinners();
         
         if (winners.length == 1) {
             votingActive = false;
+            emit VotingCompleted(winners[0]);
         } else {
             startNewRound(winners);
         }
     }
 
     function startNewRound(string[] memory tiedCandidates) internal {
+        // Sauvegarder les résultats du round actuel
         for (uint i = 0; i < candidates.length; i++) {
             votesByRound[currentRound][candidates[i]] = votesByCandidate[candidates[i]];
         }
@@ -80,19 +99,57 @@ contract Voting {
         
         currentRound++;
         
+        // Reset des votes pour le nouveau round
         for (uint i = 0; i < candidates.length; i++) {
             candidateExists[candidates[i]] = false;
             votesByCandidate[candidates[i]] = 0;
         }
         delete candidates;
         
+        // Ajouter seulement les candidats à égalité
         for (uint i = 0; i < tiedCandidates.length; i++) {
             candidates.push(tiedCandidates[i]);
             candidateExists[tiedCandidates[i]] = true;
         }
+        
+        emit RoundStarted(currentRound, tiedCandidates);
     }
 
-    function resetVotersForNewRound(address[] memory voters) public onlyOwner {
+    function resetVotersForNewRound(address[] memory voterAddresses) public onlyOwner {
+        for (uint i = 0; i < voterAddresses.length; i++) {
+            hasVoted[voterAddresses[i]] = false;
+        }
+    }
+
+    // Nouvelle fonction pour redémarrer complètement le vote
+    function restartVoting() public onlyOwner {
+        // Reset de tous les états
+        currentRound = 1;
+        votingActive = true;
+        
+        // Supprimer tous les candidats
+        for (uint i = 0; i < candidates.length; i++) {
+            candidateExists[candidates[i]] = false;
+            votesByCandidate[candidates[i]] = 0;
+        }
+        delete candidates;
+        
+        // Reset de tous les électeurs
+        for (uint i = 0; i < voters.length; i++) {
+            hasVoted[voters[i]] = false;
+            isVoter[voters[i]] = false;
+        }
+        delete voters;
+        
+        // Reset des données historiques (optionnel)
+        // Note: Les mappings imbriqués ne peuvent pas être supprimés facilement
+        // mais les nouveaux rounds écraseront les données
+        
+        emit VotingRestarted();
+    }
+
+    // Fonction pour reset seulement les électeurs (pour les nouveaux rounds)
+    function resetAllVoters() public onlyOwner {
         for (uint i = 0; i < voters.length; i++) {
             hasVoted[voters[i]] = false;
         }
@@ -132,12 +189,10 @@ contract Voting {
         return votesByCandidate[candidateName];
     }
     
-
     function getAllCandidates() public view returns (string[] memory) {
         return candidates;
     }
     
-
     function getAllResults() public view returns (string[] memory, uint[] memory) {
         uint length = candidates.length;
         uint[] memory votes = new uint[](length);
@@ -149,12 +204,10 @@ contract Voting {
         return (candidates, votes);
     }
     
-
     function checkIfVoted(address _voter) public view returns (bool) {
         return hasVoted[_voter];
     }
     
-
     function getResultsByRound(uint round) public view returns (string[] memory, uint[] memory) {
         string[] memory roundCandidates = candidatesByRound[round];
         uint[] memory votes = new uint[](roundCandidates.length);
@@ -211,5 +264,15 @@ contract Voting {
         require(getTotalVotes() == 0, "Cannot change max voters after voting started");
         require(_newMaxVoters > 0, "Max voters must be greater than 0");
         maxVoters = _newMaxVoters;
+    }
+    
+    // Fonction utilitaire pour obtenir tous les électeurs
+    function getAllVoters() public view returns (address[] memory) {
+        return voters;
+    }
+    
+    // Fonction pour obtenir le nombre d'électeurs uniques
+    function getVoterCount() public view returns (uint) {
+        return voters.length;
     }
 }

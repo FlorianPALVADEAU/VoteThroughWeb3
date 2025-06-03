@@ -4,6 +4,7 @@ import { useWallet } from "./hooks/useWallet";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import {
   Legend,
   Tooltip,
@@ -31,13 +32,22 @@ export default function App() {
     hasVoted,
     getVotesAndCandidates,
     isConnecting,
-    votesArray
+    votesArray,
+    currentRound,
+    maxVoters,
+    remainingVotes,
+    votingActive,
+    isVotingComplete,
+    winners,
+    restartVoting
   } = useWallet();
 
   const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff7f50", "#00bcd4", "#ff69b4", "#a2cf6e"];
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [openModal, setOpenModal] = useState(false);
   const [openModalVote, setOpenModalVote] = useState(false);
+  const [openResultsModal, setOpenResultsModal] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
 
   useEffect(() => {
     if (isConnected) {
@@ -45,22 +55,99 @@ export default function App() {
     }
   }, [isConnected]);
 
+  // Détecter quand le vote est terminé pour afficher les résultats
+  useEffect(() => {
+    if (isVotingComplete && winners.length > 0) {
+      if (winners.length === 1) {
+        // Il y a un gagnant unique
+        setOpenResultsModal(true);
+      } else if (winners.length > 1) {
+        // Il y a égalité, nouveau round automatique
+        console.log("Tie detected, moving to round", currentRound + 1);
+      }
+    }
+  }, [isVotingComplete, winners, currentRound]);
+
   const loadCandidates = async () => {
     setLoadingCandidates(true);
     await getVotesAndCandidates();
     setLoadingCandidates(false);
   };
 
+  const handleRestart = async () => {
+    // Confirmation avant restart
+    const confirmed = window.confirm(
+      "Are you sure you want to restart the voting system? This will delete all current votes and candidates."
+    );
+    
+    if (!confirmed) return;
+    
+    try {
+      setIsRestarting(true);
+      await restartVoting();
+      setOpenResultsModal(false);
+    } catch (error) {
+      console.error("Error restarting voting:", error);
+      alert("Error restarting the vote. Please try again.");
+    } finally {
+      setIsRestarting(false);
+    }
+  };
+
+  const getRoundStatus = () => {
+    if (!votingActive && winners.length === 1) {
+      return `Voting Complete - Winner: ${winners[0]}`;
+    }
+    if (isVotingComplete && winners.length > 1) {
+      return `Round ${currentRound} Complete - Tie detected, preparing next round`;
+    }
+    if (winners.length > 1 && currentRound > 1) {
+      return `Round ${currentRound} - Runoff between tied candidates`;
+    }
+    return `Round ${currentRound} - Voting in progress`;
+  };
+
+  const getRoundVariant = () => {
+    if (!votingActive && winners.length === 1) return "default";
+    if (isVotingComplete && winners.length > 1) return "secondary";
+    if (currentRound > 1) return "outline";
+    return "secondary";
+  };
 
   return (
     <main className="max-w-4xl mx-auto mt-12 p-4 space-y-6">
-      {
-        isOwner && (
-          <Button onClick={() => {setOpenModal(!openModal)}} variant="destructive">
-            Add Candidate
-          </Button>
-        )
-      }
+      {/* Header avec status du round */}
+      <div className="flex justify-between items-center">
+        <div className="space-y-2">
+          <h1 className="text-3xl font-bold">Vote Dashboard</h1>
+          <Badge variant={getRoundVariant()} className="text-sm">
+            {getRoundStatus()}
+          </Badge>
+        </div>
+        
+        {/* Boutons pour le propriétaire */}
+        {isOwner && (
+          <div className="flex gap-2">
+            {/* Bouton pour ajouter un candidat (seulement round 1 et vote actif) */}
+            {currentRound === 1 && votingActive && (
+              <Button onClick={() => {setOpenModal(!openModal)}} variant="destructive">
+                Add Candidate
+              </Button>
+            )}
+            
+            {/* Bouton pour redémarrer le vote (toujours visible pour le propriétaire) */}
+            <Button 
+              onClick={handleRestart} 
+              variant="outline"
+              className="border-orange-500 text-orange-600 hover:bg-orange-50"
+              disabled={isRestarting}
+            >
+              {isRestarting ? "🔄 Restarting..." : "🔄 Restart Vote"}
+            </Button>
+          </div>
+        )}
+      </div>
+
       { isConnecting ? (
         <div className="space-y-4 mt-4">
           <Skeleton className="h-48 w-full rounded-xl" />
@@ -72,7 +159,7 @@ export default function App() {
           <CardContent className="p-6 space-y-4">
             <div className="flex justify-between items-center">
               <div>
-                <h1 className="text-2xl font-semibold">Vote Dashboard</h1>
+                <h2 className="text-xl font-semibold">Connection Status</h2>
                 <p className="text-sm text-muted-foreground">
                   {isConnected ? `Connected: ${address}` : "Not connected"}
                 </p>
@@ -82,15 +169,40 @@ export default function App() {
               </Button>
             </div>
             <Separator />
+            
+            {/* Informations détaillées du vote */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <p className="text-2xl font-bold text-blue-600">{votes}</p>
+                <p className="text-sm text-muted-foreground">Total Votes</p>
+              </div>
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <p className="text-2xl font-bold text-green-600">{remainingVotes}</p>
+                <p className="text-sm text-muted-foreground">Remaining Votes</p>
+              </div>
+              <div className="text-center p-4 bg-muted rounded-lg">
+                <p className="text-2xl font-bold text-purple-600">{maxVoters}</p>
+                <p className="text-sm text-muted-foreground">Max Voters</p>
+              </div>
+            </div>
+
             <div className="flex flex-col md:flex-row md:items-center md:justify-between">
               <div>
-                <p className="font-medium">Total Votes: {votes}</p>
-                <p className="text-sm text-muted-foreground">
-                  {hasVoted ? "You have voted." : "You haven't voted yet."}
+                <p className="font-medium">
+                  Status: {hasVoted ? "✅ You have voted" : "⏳ You haven't voted yet"}
                 </p>
+                {currentRound > 1 && (
+                  <p className="text-sm text-muted-foreground">
+                    🔄 This is a runoff round due to a tie in the previous round
+                  </p>
+                )}
               </div>
-              {isConnected && !hasVoted && (
-                <Button onClick={() => (setOpenModalVote(!openModalVote))} disabled={!candidates?.length} className="mt-4 md:mt-0">
+              {isConnected && !hasVoted && votingActive && (
+                <Button 
+                  onClick={() => (setOpenModalVote(!openModalVote))} 
+                  disabled={!candidates?.length} 
+                  className="mt-4 md:mt-0"
+                >
                   Cast Vote
                 </Button>
               )}
@@ -100,7 +212,8 @@ export default function App() {
 
         <Card className="rounded-2xl shadow-md">
           <CardContent className="p-6">
-            <h2 className="text-xl font-semibold mb-4">Candidate Dominance</h2>
+            <h2 className="text-xl font-semibold mb-4">Candidate Results</h2>
+            
             {loadingCandidates ? (
               <p>Loading candidates...</p>
             ) : (
@@ -135,18 +248,27 @@ export default function App() {
                     </ResponsiveContainer>
                   </div>
                 ) : (
-                  <>
-                    <p>No candidates available.</p>
-                    <p>{isOwner ? "Please add candidates to start voting." : "Please contact your administrator to add candidates."}</p>
-                  </>
+                  <div className="text-center py-8">
+                    <p className="text-lg mb-2">No candidates available.</p>
+                    <p className="text-sm text-muted-foreground">
+                      {isOwner ? "Please add candidates to start voting." : "Please contact your administrator to add candidates."}
+                    </p>
+                  </div>
                 )
             )}
           </CardContent>
         </Card>
       </>
       )}
+      
       <AddCandidateModal isOpen={openModal} setOpen={setOpenModal}/>
-      <DisplayResultsModal isOpen={openModal} setOpen={setOpenModal}/>
+      <DisplayResultsModal 
+        isOpen={openResultsModal} 
+        setOpen={setOpenResultsModal}
+        winner={winners.length === 1 ? winners[0] : null}
+        onRestart={handleRestart}
+        isRestarting={isRestarting}
+      />
       <VoteModal isOpen={openModalVote} setOpen={setOpenModalVote} />
     </main>
   );

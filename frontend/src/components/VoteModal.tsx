@@ -8,24 +8,24 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { useWallet } from "@/hooks/useWallet"
-import { Checkbox } from "@radix-ui/react-checkbox"
 import { useState } from "react"
+import { Badge } from "@/components/ui/badge"
 
-type AddCandidateModalProps = {
+type VoteModalProps = {
     isOpen: boolean
     setOpen: (open: boolean) => void
-  }
+}
 
-const VoteModal = (props: AddCandidateModalProps) => {
+const VoteModal = (props: VoteModalProps) => {
     const {
         candidates,
         sendVote,
-        refreshData
+        refreshData,
+        currentRound,
+        remainingVotes,
+        votingActive
     } = useWallet();
-
 
     const [selectedCandidate, setSelectedCandidate] = useState('');
     const [isVoting, setIsVoting] = useState(false);
@@ -52,30 +52,101 @@ const VoteModal = (props: AddCandidateModalProps) => {
 
     const handleClose = () => {
         if (!isVoting) {
-            setSelectedCandidate(''); // Reset selection when closing
+            setSelectedCandidate('');
             props.setOpen(false);
         }
+    }
+
+    const getModalTitle = () => {
+        if (currentRound === 1) {
+            return "Choose your candidate";
+        }
+        return `Round ${currentRound} - Runoff Vote`;
+    }
+
+    const getModalDescription = () => {
+        if (currentRound === 1) {
+            return `Select a candidate to vote for. ${remainingVotes} votes remaining.`;
+        }
+        return `This is a runoff round due to a tie. Select your preferred candidate from the tied candidates. ${remainingVotes} votes remaining.`;
+    }
+
+    if (!votingActive) {
+        return null;
     }
 
     return (
         <Dialog open={props.isOpen} onOpenChange={handleClose}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
-                    <DialogTitle>Choose your candidate</DialogTitle>
+                    <div className="flex items-center gap-2">
+                        <DialogTitle>{getModalTitle()}</DialogTitle>
+                        {currentRound > 1 && (
+                            <Badge variant="secondary">Round {currentRound}</Badge>
+                        )}
+                    </div>
                     <DialogDescription>
-                        Select a candidate to vote for. Click save when you're done.
+                        {getModalDescription()}
                     </DialogDescription>
                 </DialogHeader>
-                <div className="flex w-full gap-4">
-                    {candidates && candidates.length > 0 && (
-                        candidates.map((candidate, index) => (
-                            <Button className="flex-1" 
-                            variant={selectedCandidate === candidate ? "default" : "outline"}
-                            onClick={() => setSelectedCandidate(candidate)} key={index}>{candidate}</Button>
-                        ))
-                    )}
+
+                {currentRound > 1 && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                        <p className="text-sm text-blue-800">
+                            🔄 This is a runoff round because the previous round ended in a tie.
+                        </p>
+                    </div>
+                )}
+                
+                <div className="space-y-3">
+                    <p className="text-sm font-medium">Available candidates:</p>
+                    <div className="grid gap-2">
+                        {candidates && candidates.length > 0 && (
+                            candidates.map((candidate, index) => (
+                                <Button 
+                                    key={index}
+                                    className="w-full justify-start" 
+                                    variant={selectedCandidate === candidate ? "default" : "outline"}
+                                    onClick={() => setSelectedCandidate(candidate)}
+                                    disabled={isVoting}
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div className={`w-4 h-4 rounded-full border-2 ${
+                                            selectedCandidate === candidate 
+                                                ? 'bg-white border-white' 
+                                                : 'border-current'
+                                        }`} />
+                                        {candidate}
+                                        {currentRound > 1 && (
+                                            <Badge variant="outline" className="ml-auto">
+                                                Tied
+                                            </Badge>
+                                        )}
+                                    </div>
+                                </Button>
+                            ))
+                        )}
+                    </div>
                 </div>
-                <Button onClick={handleSubmit} className="flex-1">{isVoting ? "Voting..." : "Cast Vote"}</Button>
+
+                <DialogFooter className="gap-2">
+                    <DialogClose asChild>
+                        <Button 
+                            variant="outline" 
+                            disabled={isVoting}
+                            onClick={handleClose}
+                        >
+                            Cancel
+                        </Button>
+                    </DialogClose>
+                    <Button 
+                        onClick={handleSubmit} 
+                        disabled={!selectedCandidate || isVoting}
+                        className="min-w-[120px]"
+                    >
+                        {isVoting ? "Voting..." : "Cast Vote"}
+                    </Button>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     )
