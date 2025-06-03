@@ -5,8 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
-  RadialBarChart,
-  RadialBar,
   Legend,
   Tooltip,
   ResponsiveContainer,
@@ -17,71 +15,42 @@ import {
   YAxis
 } from "recharts";
 import { AddCandidateModal } from "./components/AddCandidateModal";
-import { TooltipContent, TooltipTrigger, Tooltip as UiTooltip } from "./components/ui/tooltip";
 import VoteModal from "./components/VoteModal";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DisplayResultsModal } from "./components/DisplayResultsModal";
 
 export default function App() {
   const {
-    // États de base
     isConnected,
     address,
     isOwner,
     connect,
-    disconnect,
-    
-    // États du vote
+    disconnect,    
     candidates,
     votes,
-    maxVoters,
-    currentRound,
     hasVoted,
-    votingActive,
-    remainingVotes,
-    
-    // Fonctions
-    sendVote,
-    addCandidate,
-    refreshData
     getVotesAndCandidates,
-    sendVote,
-    hasVoted,
-    votes,
-    isOwner,
-    isConnecting
+    isConnecting,
+    votesArray
   } = useWallet();
 
   const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff7f50", "#00bcd4", "#ff69b4", "#a2cf6e"];
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [openModal, setOpenModal] = useState(false);
+  const [openModalVote, setOpenModalVote] = useState(false);
 
   useEffect(() => {
     if (isConnected) {
       loadCandidates();
     }
+  }, [isConnected]);
 
-    try {
-        setIsVoting(true);
-        await sendVote(candidateName); // ✅ Passe bien une string
-        alert(`Vote envoyé avec succès pour ${candidateName}!`);
-    } catch (error) {
-        console.error('Erreur lors du vote:', error);
-        alert('Erreur lors du vote. Vérifiez la console.');
-    } finally {
-        setIsVoting(false);
-    }
+  const loadCandidates = async () => {
+    setLoadingCandidates(true);
+    await getVotesAndCandidates();
+    setLoadingCandidates(false);
   };
 
-  const [isVoting, setIsVoting] = useState(false);
-  const [loadingCandidates, setLoadingCandidates] = useState(false);
-  const [openModal, setOpenModal] = useState(false);
-  const [openModalVote, setOpenModalVote] = useState(false);
-
-  const mockData = candidates?.map((name, i) => ({
-    name,
-    votes: Math.floor(Math.random() * 100), // Replace with real votes later
-    fill: `hsl(${(i * 100) % 360}, 70%, 50%)`
-  })) || [];
 
   return (
     <main className="max-w-4xl mx-auto mt-12 p-4 space-y-6">
@@ -121,7 +90,7 @@ export default function App() {
                 </p>
               </div>
               {isConnected && !hasVoted && (
-                <Button onClick={sendVote} disabled={!candidates?.length} className="mt-4 md:mt-0">
+                <Button onClick={() => (setOpenModalVote(!openModalVote))} disabled={!candidates?.length} className="mt-4 md:mt-0">
                   Cast Vote
                 </Button>
               )}
@@ -142,7 +111,7 @@ export default function App() {
                         layout="vertical"
                         data={candidates.map((candidate, index) => ({
                           name: candidate,
-                          votes: Array.isArray(votes) ? votes[index] || 0 : 0,
+                          votes: Array.isArray(votesArray) ? votesArray[index] || 0 : 0,
                           fill: COLORS[index % COLORS.length],
                         }))}
                         margin={{ top: 20, right: 40, left: 20, bottom: 20 }}
@@ -150,8 +119,8 @@ export default function App() {
                         <XAxis type="number" />
                         <YAxis type="category" dataKey="name" />
                         <Tooltip
-                          formatter={(value, name, props) => {
-                            const totalVotes = Array.isArray(votes) ? votes.reduce((a, b) => a + b, 0) : Number(votes) || 0;
+                          formatter={(value, _name, props) => {
+                            const totalVotes = Array.isArray(votesArray) ? votesArray.reduce((a, b) => a + b, 0) : Number(votesArray) || 0;
                             const percentage = totalVotes > 0 ? ((Number(value) / totalVotes) * 100).toFixed(1) : "0.0";
                             return [`${value} votes (${percentage}%)`, props.payload.name];
                           }}
@@ -177,6 +146,7 @@ export default function App() {
       </>
       )}
       <AddCandidateModal isOpen={openModal} setOpen={setOpenModal}/>
+      <DisplayResultsModal isOpen={openModal} setOpen={setOpenModal}/>
       <VoteModal isOpen={openModalVote} setOpen={setOpenModalVote} />
     </main>
   );

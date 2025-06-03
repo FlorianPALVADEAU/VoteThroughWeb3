@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable react-hooks/exhaustive-deps */
 
 import { useEffect, useState } from "react";
@@ -19,6 +20,7 @@ export function useWallet() {
     const [candidates, setCandidates] = useState<string[] | null>(null);
     const [hasVoted, setHasVoted] = useState<boolean>(false);
     const [votes, setVotes] = useState<number>(0);
+    const [votesArray, setVotesArray] = useState<number[]>([]);
     const [isConnecting, setIsConnecting] = useState<boolean>(false);
     const [isOwner, setIsOwner] = useState<boolean>(false);
 
@@ -150,17 +152,16 @@ export function useWallet() {
                 setHasVoted(userHasVoted);
             }
 
-            const candidatesList = await contract?.getAllCandidates();
-            setCandidates(candidatesList);
+            await getVotesAndCandidates();
 
-            console.log("Contract data loaded:", {
-                round: votingStatus._currentRound,
-                totalVotes: votingStatus._totalVotes,
-                maxVoters: votingStatus._maxVoters,
-                remainingVotes: votingStatus._remainingVotes,
-                votingActive: votingStatus._votingActive,
-                candidates: candidatesList
-            });
+            // console.log("Contract data loaded:", {
+            //     round: votingStatus._currentRound,
+            //     totalVotes: votingStatus._totalVotes,
+            //     maxVoters: votingStatus._maxVoters,
+            //     remainingVotes: votingStatus._remainingVotes,
+            //     votingActive: votingStatus._votingActive,
+            //     candidates: candidatesList
+            // });
 
         } catch (error) {
             console.error("Error loading contract data:", error);
@@ -177,32 +178,11 @@ export function useWallet() {
             const contractSign = new ethers.Contract(contractAddress, VotingABI.abi, signer);
 
             const v = await contractSign.getAllResults();
-            setVotes(v[1].map((c: string) => Number(c)));
+            setVotesArray(v[1].map((c: string) => Number(c)));
             setCandidates(v[0]);
         } catch (error) {
             console.error("Error fetching wallet balance:", error);
-            setVotes(0);
-        }
-    }
-
-    const getCandidates = async () => {
-        if (!checkMetaMaskIntalled()) return;
-
-        try {
-            if (!await checkWalletConnection()) return;
-
-            const c = await wallet?.getAllCandidates();
-            if (c && Array.isArray(c)) {
-                setCandidates(c);
-                console.log("candidates", c);
-                
-            } else {
-                console.error("Invalid candidates data:", c);
-                setCandidates([]);
-            }
-        } catch (error) {
-            console.error("Error fetching candidates:", error);
-            return [];
+            setVotesArray([]);
         }
     }
 
@@ -349,14 +329,12 @@ export function useWallet() {
         isConnected: !!wallet,
         candidates,
         getVotesAndCandidates,
-        candidates,
         votes,
         sendVote,
         isOwner,
         hasVoted,
         addCandidate,
-        
-        // Nouveaux états et fonctions
+        votesArray,
         currentRound,
         maxVoters,
         remainingVotes,
