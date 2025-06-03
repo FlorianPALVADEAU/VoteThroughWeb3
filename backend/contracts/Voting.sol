@@ -155,21 +155,15 @@ contract Voting {
     }
     
 
-    function getWinner() public view returns (string memory winnerName, uint winnerVotes) {
-        require(candidates.length > 0, "No candidates available");
+    function getResultsByRound(uint round) public view returns (string[] memory, uint[] memory) {
+        string[] memory roundCandidates = candidatesByRound[round];
+        uint[] memory votes = new uint[](roundCandidates.length);
         
-        uint maxVotes = 0;
-        string memory winner = candidates[0];
-        
-        for (uint i = 0; i < candidates.length; i++) {
-            uint currentVotes = votesByCandidate[candidates[i]];
-            if (currentVotes > maxVotes) {
-                maxVotes = currentVotes;
-                winner = candidates[i];
-            }
+        for (uint i = 0; i < roundCandidates.length; i++) {
+            votes[i] = votesByRound[round][roundCandidates[i]];
         }
         
-        return (winner, maxVotes);
+        return (roundCandidates, votes);
     }
     
     function getTotalVotes() public view returns (uint) {
