@@ -76,10 +76,10 @@ export function useWallet() {
             const contractSign = new ethers.Contract(contractAddress, VotingABI.abi, signer);
             setWallet(contractSign);
 
-            // Check if user is owner
             const ownerAddress = await contractSign.owner();
             setIsOwner(ownerAddress.toLowerCase() === userAddress.toLowerCase());
             localStorage.removeItem('manuallyDisconnected');
+
 
             await loadContractData(contractSign, userAddress);
             console.log("Wallet connected successfully.", contractSign);
@@ -167,14 +167,18 @@ export function useWallet() {
         }
     }
 
-    const getWalletVotes = async () => {
+    const getVotesAndCandidates = async () => {
         if (!checkMetaMaskIntalled()) return;
+        if (!checkWalletConnection()) return;
 
         try {
-            const v = await wallet?.getTotalVotes(contractAddress);
-            console.log('AAAAAAAAAA', v);
-            
-            setVotes(v);
+            const provider = new ethers.BrowserProvider(window.ethereum);
+            const signer = await provider.getSigner();
+            const contractSign = new ethers.Contract(contractAddress, VotingABI.abi, signer);
+
+            const v = await contractSign.getAllResults();
+            setVotes(v[1].map((c: string) => Number(c)));
+            setCandidates(v[0]);
         } catch (error) {
             console.error("Error fetching wallet balance:", error);
             setVotes(0);
@@ -207,7 +211,6 @@ export function useWallet() {
         if (!await checkWalletConnection()) return;
 
         try {
-            // Vérifier si l'utilisateur peut voter
             const canVote = await wallet?.canVote();
             if (!canVote) {
                 console.error("You cannot vote at this time");
@@ -221,7 +224,6 @@ export function useWallet() {
             console.log("Vote sent successfully:", tx);
             
             await loadContractData();
-            
         } catch (error) {
             console.error("Error sending vote:", error);
             throw error; // Relancer l'erreur pour que l'UI puisse la gérer
@@ -240,9 +242,9 @@ export function useWallet() {
             const tx = await wallet?.addCandidate(name);
             await tx.wait();
             console.log("Candidate added successfully:", name);
-            
+          
             await loadContractData();
-            
+            await getVotesAndCandidates();
         } catch (error) {
             console.error("Error adding candidate:", error);
             throw error;
@@ -345,6 +347,8 @@ export function useWallet() {
         connect,
         disconnect,
         isConnected: !!wallet,
+        candidates,
+        getVotesAndCandidates,
         candidates,
         votes,
         sendVote,
